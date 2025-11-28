@@ -1,0 +1,27 @@
+# see https://github.com/zerocore-ai/microsandbox/blob/main/MSB_V_DOCKER.md
+
+builds:
+  app_base:
+    image: "python:3"
+    memory: 2048
+    cpus: 2
+    workdir: "/build"
+    steps:
+      start: |
+        pip install numpy pandas
+    exports:
+      packages: "/build/dist/packages"
+      lockfile: "/build/requirements.lock"
+
+# Sandbox configurations
+sandboxes:
+  app:
+    image: python:3
+    memory: 2048
+    cpus: 1
+    volumes:
+      - "./datasets:/datasets"
+    workdir: "/app"
+    imports:
+      app_base:
+        packages: "/app/packages"
