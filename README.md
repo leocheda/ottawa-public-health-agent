@@ -77,6 +77,29 @@ uv run python main_async.py
 - `main_async.py` and `agent.py`: Async Playwright API for concurrent operations
 - Agent system uses async throughout for tool execution
 
+### Agent Orchestration
+
+**Multi-agent layout (in `ottawa_public_health_agent/agent.py`)**
+- `RetrieveHealthDataAgent`: Calls a dedicated MCP tool to fetch **current** Ottawa outbreak tables; does not summarize the data.
+- `HealthAdviceAgent`: Produces visitor guidance for outbreaks and broader communicable disease advice, optionally delegating research and summarization through embedded `AgentTool` helpers.
+- `ResearchAgent`: Runs Google Search for historical context, leadership info, and non-facility health topics, enforcing guardrails against answering current outbreak questions directly.
+- `DataAnalystAgent`: Generates Python and executes it inside a sandboxed tool for any calculations or data wrangling, ensuring results come from code execution rather than the LLM.
+- `SummarizerAgent`: Turns raw findings into executive briefings, typically consuming outputs from the analysis or advice agents.
+- `TimeAgent`: Provides the current timestamp via a purpose-built tool to avoid relying on model time.
+
+**Deterministic routing**
+- A lightweight intent detector classifies incoming messages into outbreak, health-advice, analysis, or research requests; the router then calls the appropriate specialist without depending on the LLM to choose tools.
+- Outbreak workflows chain `RetrieveHealthDataAgent` and `HealthAdviceAgent` so visitor precautions always accompany live outbreak tables.
+- The root `Ottawa_Public_Health_Agent` exposes the specialist agents as tools and delegates all end-user prompts to the deterministic router, preserving a consistent workflow even when loaded through ADK entrypoints.
+
+**MCP integration for live data**
+- `retrieve_health_data_tool()` launches a local MCP server (`mcp_server.py`) via stdio, initializes an MCP client session, and invokes the `get_ottawa_outbreaks` tool.
+- The MCP server uses FastMCP to wrap the PowerBI scraping routine and returns CSV-formatted tables, separating browsing permissions from the core agent runtime.
+
+**Customized tools and execution sandboxes**
+- The MCP tool pulls data through `tools/ottawa_health_scraper.py`, which drives Patchright/Playwright headless Chromium to render PowerBI dashboards, waits for frame navigation, and extracts tabular ARIA-marked cells into datasets before converting them to CSV.
+- Analytical tasks go through `tool_run_python_code()`, which spins up a `microsandbox.PythonSandbox` container so that LLM-authored code executes in isolation with pandas/numpy preinstalled.
+
 ## Future Development Notes
 
 **Planned Features** (see design-sketch.md)
