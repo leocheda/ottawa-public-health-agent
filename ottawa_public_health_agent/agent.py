@@ -23,8 +23,10 @@ load_dotenv()
 VERBOSE_INIT = os.getenv("OPH_AGENT_VERBOSE_INIT", "false").lower() == "true"
 APP_NAME = os.getenv("APP_NAME", "Ottawa_Public_Health_Agent")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
-USER_ID = os.getenv("USER_ID", "local-user")
-DEFAULT_SESSION_ID = os.getenv("SESSION_ID", "default")
+USER_ID = os.getenv("USER_ID", "user")  # default persistent user id
+DEFAULT_SESSION_ID = os.getenv(
+    "SESSION_ID", "b5d79ce9-bf35-40e9-85b2-bb12d2a1b3a1"
+)  # default persistent session id
 
 
 async def retrieve_health_data_tool():
