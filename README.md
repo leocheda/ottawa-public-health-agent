@@ -39,6 +39,10 @@ USER_ID=my_user_name SESSION_ID=my_session_id uv run python resume_cli.py
 # Prefix any start command with these env vars to log DEBUG output to a file:
 OPH_AGENT_FILE_LOGS=true OPH_AGENT_LOG_PATH=logger.log USER_ID=my_user_name SESSION_ID=my_session_id uv run python resume_cli.py
 
+# Quick debug run with random session (no fixed IDs, no persistence required)
+uv run adk web --log_level DEBUG .
+# Effect: Starts the Web UI at http://127.0.0.1:8000 with DEBUG logs to terminal; each launch creates a random session.
+
 # Web UI with persistent sessions (reuses SQLite DB + fixed user/session IDs)
 uv run adk web --session_service_uri sqlite+aiosqlite:///my_agent_data.db
 # Effect: Web UI lists and continues the same conversation across restarts as long as USER_ID/SESSION_ID match.
