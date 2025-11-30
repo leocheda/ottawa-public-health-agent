@@ -17,6 +17,7 @@ from mcp.client.stdio import stdio_client
 import json
 import os
 import urllib.request
+import logging
 
 
 load_dotenv()
@@ -27,6 +28,24 @@ USER_ID = os.getenv("USER_ID", "user")  # default persistent user id
 DEFAULT_SESSION_ID = os.getenv(
     "SESSION_ID", "my_session_id"
 )  # default persistent session id
+ENABLE_FILE_LOGS = os.getenv("OPH_AGENT_FILE_LOGS", "false").lower() == "true"
+LOG_PATH = os.getenv("OPH_AGENT_LOG_PATH", "logger.log")
+
+# Optional file logging with cleanup; gated to avoid nuking logs unexpectedly.
+if ENABLE_FILE_LOGS:
+    try:
+        if os.path.exists(LOG_PATH):
+            os.remove(LOG_PATH)
+            if VERBOSE_INIT:
+                print(f"Cleaned up old log file at {LOG_PATH}")
+    except Exception as exc:
+        if VERBOSE_INIT:
+            print(f"Skipping log cleanup: {exc}")
+    logging.basicConfig(
+        filename=LOG_PATH,
+        level=logging.DEBUG,
+        format="%(filename)s:%(lineno)s %(levelname)s:%(message)s",
+    )
 
 
 async def retrieve_health_data_tool():
@@ -249,8 +268,6 @@ async def run_session(
                         print(f"{MODEL_NAME} > ", event.content.parts[0].text)
     else:
         print("No queries!")
-
-
 # Research Agent: Its job is to use the google_search tool and present findings.
 research_agent = Agent(
     name="ResearchAgent",
