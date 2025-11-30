@@ -21,6 +21,10 @@ import urllib.request
 
 load_dotenv()
 VERBOSE_INIT = os.getenv("OPH_AGENT_VERBOSE_INIT", "false").lower() == "true"
+APP_NAME = os.getenv("APP_NAME", "Ottawa_Public_Health_Agent")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
+USER_ID = os.getenv("USER_ID", "local-user")
+DEFAULT_SESSION_ID = os.getenv("SESSION_ID", "default")
 
 
 async def retrieve_health_data_tool():
@@ -81,7 +85,7 @@ LOCATION_FALLBACK = {
 }
 
 
-async def normalize_timezone(tz_name: str) -> str:
+def normalize_timezone(tz_name: str) -> str:
     try:
         ZoneInfo(tz_name)
         return tz_name
@@ -93,7 +97,7 @@ async def normalize_timezone(tz_name: str) -> str:
         return LOCATION_FALLBACK["timezone"]
 
 
-async def get_user_location():
+def get_user_location():
     """
     Determines a location for context, preferring local configuration and only
     performing a network lookup when explicitly enabled.
@@ -141,7 +145,7 @@ CURRENT_COUNTRY = location_data["country"]
 CURRENT_TIMEZONE = normalize_timezone(location_data["timezone"])
 
 
-async def current_time_str() -> str:
+def current_time_str() -> str:
     try:
         return datetime.now(ZoneInfo(CURRENT_TIMEZONE)).strftime("%Y-%m-%d %H:%M:%S %Z")
     except Exception:
@@ -161,7 +165,7 @@ if VERBOSE_INIT:
     )
 
 
-async def base_state(extra: dict | None = None) -> dict:
+def base_state(extra: dict | None = None) -> dict:
     """
     Build a deterministic state payload shared with agent calls.
     """
@@ -197,7 +201,7 @@ async def call_with_retry(
 async def run_session(
     runner_instance: Runner,
     user_queries: list[str] | str = None,
-    session_name: str = "default",
+    session_name: str = DEFAULT_SESSION_ID,
 ):
     print(f"\n ### Session: {session_name}")
 
@@ -209,7 +213,9 @@ async def run_session(
         session = await session_service.create_session(
             app_name=app_name, user_id=USER_ID, session_id=session_name
         )
-    except:
+    except Exception as exc:
+        if VERBOSE_INIT:
+            print(f"create_session failed ({exc}), attempting get_session")
         session = await session_service.get_session(
             app_name=app_name, user_id=USER_ID, session_id=session_name
         )
@@ -244,13 +250,9 @@ async def run_session(
 
 
 # Step 2: Switch to DatabaseSessionService
-# SQLite database will be created automatically
-db_url = "sqlite:///my_agent_data.db"  # Local SQLite file
+# SQLite database will be created automatically (async driver required)
+db_url = "sqlite+aiosqlite:///my_agent_data.db"  # Local SQLite file with async driver
 session_service = DatabaseSessionService(db_url=db_url)
-
-# Step 3: Create a new runner with persistent storage
-runner = Runner(agent=chatbot_agent, app_name=APP_NAME, session_service=session_service)
-
 
 # Research Agent: Its job is to use the google_search tool and present findings.
 research_agent = Agent(
@@ -759,3 +761,7 @@ root_agent = Agent(
         AgentTool(time_agent),
     ],
 )
+
+# Default wiring for Runner/ADK entrypoints
+chatbot_agent = root_agent
+runner = Runner(agent=chatbot_agent, app_name=APP_NAME, session_service=session_service)
