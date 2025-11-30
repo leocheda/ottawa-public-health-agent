@@ -21,11 +21,11 @@ import urllib.request
 
 load_dotenv()
 VERBOSE_INIT = os.getenv("OPH_AGENT_VERBOSE_INIT", "false").lower() == "true"
-APP_NAME = os.getenv("APP_NAME", "Ottawa_Public_Health_Agent")
+APP_NAME = os.getenv("APP_NAME", "ottawa_public_health_agent")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 USER_ID = os.getenv("USER_ID", "user")  # default persistent user id
 DEFAULT_SESSION_ID = os.getenv(
-    "SESSION_ID", "b5d79ce9-bf35-40e9-85b2-bb12d2a1b3a1"
+    "SESSION_ID", "my_session_id"
 )  # default persistent session id
 
 
@@ -701,7 +701,7 @@ async def run_user_message(
 
 # Root agent for ADK loader compatibility. Instruct it to always delegate to deterministic router.
 root_agent = Agent(
-    name="Ottawa_Public_Health_Agent",
+    name=APP_NAME,
     model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
     instruction=f"""Your purpose is to orchestrate a team of specialized agents in order to answer any user query, with particular expertise in Ottawa Public Health outbreak information.
     You should also engage in helpful conversation and remember details the user shares with you (like their name).
@@ -765,15 +765,6 @@ root_agent = Agent(
         # AgentTool(tool_run_python_code), # Added this back if needed, but data_analyst has it.
     ],
 )
-
-# Configuration for Persistence
-APP_NAME = "ottawa_public_health_agent"
-USER_ID = "default_user"
-
-# Step 2: Switch to DatabaseSessionService
-# SQLite database will be created automatically
-db_url = "sqlite+aiosqlite:///my_agent_data.db"  # Local SQLite file
-session_service = DatabaseSessionService(db_url=db_url)
 
 # Default wiring for Runner/ADK entrypoints
 chatbot_agent = root_agent
