@@ -702,6 +702,7 @@ root_agent = Agent(
     name="Ottawa_Public_Health_Agent",
     model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
     instruction=f"""Your purpose is to orchestrate a team of specialized agents in order to answer any user query, with particular expertise in Ottawa Public Health outbreak information.
+    You should also engage in helpful conversation and remember details the user shares with you (like their name).
     
     CURRENT TIME CONTEXT: Operate in timezone {CURRENT_TIMEZONE} for {CURRENT_CITY}, {CURRENT_COUNTRY}.
     IMPORTANT: For any question about time/date/timezone, delegate to the `TimeAgent`.
@@ -759,8 +760,18 @@ root_agent = Agent(
         AgentTool(summarizer_agent),
         AgentTool(health_advice_agent),
         AgentTool(time_agent),
+        # AgentTool(tool_run_python_code), # Added this back if needed, but data_analyst has it.
     ],
 )
+
+# Configuration for Persistence
+APP_NAME = "ottawa_public_health_agent"
+USER_ID = "default_user"
+
+# Step 2: Switch to DatabaseSessionService
+# SQLite database will be created automatically
+db_url = "sqlite+aiosqlite:///my_agent_data.db"  # Local SQLite file
+session_service = DatabaseSessionService(db_url=db_url)
 
 # Default wiring for Runner/ADK entrypoints
 chatbot_agent = root_agent

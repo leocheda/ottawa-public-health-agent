@@ -1263,6 +1263,7 @@ name = "leo-project"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "beautifulsoup4" },
     { name = "e2b-code-interpreter" },
     { name = "google-adk" },
@@ -1278,6 +1279,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.21.0" },
     { name = "beautifulsoup4", specifier = ">=4.14.2" },
     { name = "e2b-code-interpreter", specifier = ">=2.3.0" },
     { name = "google-adk", specifier = ">=1.19.0" },
