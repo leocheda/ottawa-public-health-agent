@@ -81,7 +81,7 @@ LOCATION_FALLBACK = {
 }
 
 
-def normalize_timezone(tz_name: str) -> str:
+async def normalize_timezone(tz_name: str) -> str:
     try:
         ZoneInfo(tz_name)
         return tz_name
@@ -93,7 +93,7 @@ def normalize_timezone(tz_name: str) -> str:
         return LOCATION_FALLBACK["timezone"]
 
 
-def get_user_location():
+async def get_user_location():
     """
     Determines a location for context, preferring local configuration and only
     performing a network lookup when explicitly enabled.
@@ -141,7 +141,7 @@ CURRENT_COUNTRY = location_data["country"]
 CURRENT_TIMEZONE = normalize_timezone(location_data["timezone"])
 
 
-def current_time_str() -> str:
+async def current_time_str() -> str:
     try:
         return datetime.now(ZoneInfo(CURRENT_TIMEZONE)).strftime("%Y-%m-%d %H:%M:%S %Z")
     except Exception:
@@ -161,7 +161,7 @@ if VERBOSE_INIT:
     )
 
 
-def base_state(extra: dict | None = None) -> dict:
+async def base_state(extra: dict | None = None) -> dict:
     """
     Build a deterministic state payload shared with agent calls.
     """
@@ -191,6 +191,65 @@ async def call_with_retry(
                 raise
             if VERBOSE_INIT:
                 print(f"Retrying {agent.name} after error: {exc}")
+
+
+# Define helper functions that will be reused throughout the notebook
+async def run_session(
+    runner_instance: Runner,
+    user_queries: list[str] | str = None,
+    session_name: str = "default",
+):
+    print(f"\n ### Session: {session_name}")
+
+    # Get app name from the Runner
+    app_name = runner_instance.app_name
+
+    # Attempt to create a new session or retrieve an existing one
+    try:
+        session = await session_service.create_session(
+            app_name=app_name, user_id=USER_ID, session_id=session_name
+        )
+    except:
+        session = await session_service.get_session(
+            app_name=app_name, user_id=USER_ID, session_id=session_name
+        )
+
+    # Process queries if provided
+    if user_queries:
+        # Convert single query to list for uniform processing
+        if type(user_queries) == str:
+            user_queries = [user_queries]
+
+        # Process each query in the list sequentially
+        for query in user_queries:
+            print(f"\nUser > {query}")
+
+            # Convert the query string to the ADK Content format
+            query = types.Content(role="user", parts=[types.Part(text=query)])
+
+            # Stream the agent's response asynchronously
+            async for event in runner_instance.run_async(
+                user_id=USER_ID, session_id=session.id, new_message=query
+            ):
+                # Check if the event contains valid content
+                if event.content and event.content.parts:
+                    # Filter out empty or "None" responses before printing
+                    if (
+                        event.content.parts[0].text != "None"
+                        and event.content.parts[0].text
+                    ):
+                        print(f"{MODEL_NAME} > ", event.content.parts[0].text)
+    else:
+        print("No queries!")
+
+
+# Step 2: Switch to DatabaseSessionService
+# SQLite database will be created automatically
+db_url = "sqlite:///my_agent_data.db"  # Local SQLite file
+session_service = DatabaseSessionService(db_url=db_url)
+
+# Step 3: Create a new runner with persistent storage
+runner = Runner(agent=chatbot_agent, app_name=APP_NAME, session_service=session_service)
 
 
 # Research Agent: Its job is to use the google_search tool and present findings.
