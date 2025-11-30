@@ -1,0 +1,4 @@
+services:
+  - scheme: sqlite+aiosqlite
+    type: session
+    class: google.adk.sessions.database_session_service.DatabaseSessionService

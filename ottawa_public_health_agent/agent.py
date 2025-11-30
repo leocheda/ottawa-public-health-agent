@@ -1,9 +1,14 @@
+from typing import Any, Dict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from google.adk.agents import Agent
+from google.adk.agents import Agent, LlmAgent
+from google.adk.apps.app import App, EventsCompactionConfig
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.models.google_llm import Gemini
+from google.adk.sessions import DatabaseSessionService, InMemorySessionService
+from google.adk.runners import Runner
+from google.adk.tools.tool_context import ToolContext
 from google.adk.tools import google_search
 from google.genai import types
 from microsandbox import PythonSandbox
@@ -16,6 +21,12 @@ import urllib.request
 
 load_dotenv()
 VERBOSE_INIT = os.getenv("OPH_AGENT_VERBOSE_INIT", "false").lower() == "true"
+APP_NAME = os.getenv("APP_NAME", "ottawa_public_health_agent")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
+USER_ID = os.getenv("USER_ID", "user")  # default persistent user id
+DEFAULT_SESSION_ID = os.getenv(
+    "SESSION_ID", "my_session_id"
+)  # default persistent session id
 
 
 async def retrieve_health_data_tool():
@@ -187,6 +198,63 @@ async def call_with_retry(
             if VERBOSE_INIT:
                 print(f"Retrying {agent.name} after error: {exc}")
 
+
+# Define helper functions that will be reused throughout the notebook
+async def run_session(
+    runner_instance: Runner,
+    user_queries: list[str] | str = None,
+    session_name: str = DEFAULT_SESSION_ID,
+):
+    print(f"\n ### Session: {session_name}")
+
+    # Get app name from the Runner
+    app_name = runner_instance.app_name
+
+    # Attempt to create a new session or retrieve an existing one
+    try:
+        session = await session_service.create_session(
+            app_name=app_name, user_id=USER_ID, session_id=session_name
+        )
+    except Exception as exc:
+        if VERBOSE_INIT:
+            print(f"create_session failed ({exc}), attempting get_session")
+        session = await session_service.get_session(
+            app_name=app_name, user_id=USER_ID, session_id=session_name
+        )
+
+    # Process queries if provided
+    if user_queries:
+        # Convert single query to list for uniform processing
+        if type(user_queries) == str:
+            user_queries = [user_queries]
+
+        # Process each query in the list sequentially
+        for query in user_queries:
+            print(f"\nUser > {query}")
+
+            # Convert the query string to the ADK Content format
+            query = types.Content(role="user", parts=[types.Part(text=query)])
+
+            # Stream the agent's response asynchronously
+            async for event in runner_instance.run_async(
+                user_id=USER_ID, session_id=session.id, new_message=query
+            ):
+                # Check if the event contains valid content
+                if event.content and event.content.parts:
+                    # Filter out empty or "None" responses before printing
+                    if (
+                        event.content.parts[0].text != "None"
+                        and event.content.parts[0].text
+                    ):
+                        print(f"{MODEL_NAME} > ", event.content.parts[0].text)
+    else:
+        print("No queries!")
+
+
+# Step 2: Switch to DatabaseSessionService
+# SQLite database will be created automatically (async driver required)
+db_url = "sqlite+aiosqlite:///my_agent_data.db"  # Local SQLite file with async driver
+session_service = DatabaseSessionService(db_url=db_url)
 
 # Research Agent: Its job is to use the google_search tool and present findings.
 research_agent = Agent(
@@ -633,9 +701,10 @@ async def run_user_message(
 
 # Root agent for ADK loader compatibility. Instruct it to always delegate to deterministic router.
 root_agent = Agent(
-    name="Ottawa_Public_Health_Agent",
+    name=APP_NAME,
     model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
     instruction=f"""Your purpose is to orchestrate a team of specialized agents in order to answer any user query, with particular expertise in Ottawa Public Health outbreak information.
+    You should also engage in helpful conversation and remember details the user shares with you (like their name).
     
     CURRENT TIME CONTEXT: Operate in timezone {CURRENT_TIMEZONE} for {CURRENT_CITY}, {CURRENT_COUNTRY}.
     IMPORTANT: For any question about time/date/timezone, delegate to the `TimeAgent`.
@@ -693,5 +762,10 @@ root_agent = Agent(
         AgentTool(summarizer_agent),
         AgentTool(health_advice_agent),
         AgentTool(time_agent),
+        # AgentTool(tool_run_python_code), # Added this back if needed, but data_analyst has it.
     ],
 )
+
+# Default wiring for Runner/ADK entrypoints
+chatbot_agent = root_agent
+runner = Runner(agent=chatbot_agent, app_name=APP_NAME, session_service=session_service)

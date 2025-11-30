@@ -28,6 +28,16 @@ uv run adk run ./ottawa_public_health_agent
 # OR Run the ADK Web Interface
 uv run adk web
 # Then access at http://127.0.0.1:8000
+
+
+# Persistent CLI that resumes the same conversation
+USER_ID=my_user_name SESSION_ID=my_session_id uv run python resume_cli.py
+# USER_ID/SESSION_ID can be any strings you like; using the same pair hits the same persisted session.
+# Effect: Terminal chat resumes the same DB-backed session; Type 'exit' or Ctrl+C to quit, rerun to continue.
+
+# Web UI with persistent sessions (reuses SQLite DB + fixed user/session IDs)
+uv run adk web --session_service_uri sqlite+aiosqlite:///my_agent_data.db
+# Effect: Web UI lists and continues the same conversation across restarts as long as USER_ID/SESSION_ID match.
 ```
 
 ### Run Standalone Scripts
