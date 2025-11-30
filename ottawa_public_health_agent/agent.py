@@ -251,11 +251,6 @@ async def run_session(
         print("No queries!")
 
 
-# Step 2: Switch to DatabaseSessionService
-# SQLite database will be created automatically (async driver required)
-db_url = "sqlite+aiosqlite:///my_agent_data.db"  # Local SQLite file with async driver
-session_service = DatabaseSessionService(db_url=db_url)
-
 # Research Agent: Its job is to use the google_search tool and present findings.
 research_agent = Agent(
     name="ResearchAgent",
@@ -766,6 +761,20 @@ root_agent = Agent(
     ],
 )
 
-# Default wiring for Runner/ADK entrypoints
+# Persistent session service (async SQLite) and compaction-enabled app
+db_url = os.getenv("SESSION_SERVICE_URI", "sqlite+aiosqlite:///my_agent_data.db")
+session_service = DatabaseSessionService(db_url=db_url)
+
+# Wrap root agent into an App so ADK can apply event compaction between runs.
 chatbot_agent = root_agent
-runner = Runner(agent=chatbot_agent, app_name=APP_NAME, session_service=session_service)
+compaction_app = App(
+    name=APP_NAME,
+    root_agent=chatbot_agent,
+    events_compaction_config=EventsCompactionConfig(
+        compaction_interval=3,  # compact every 3 invocations
+        overlap_size=1,  # keep 1 previous turn when compacting
+    ),
+)
+
+# Default runner used by CLI/Web; shares DB and compaction settings.
+runner = Runner(app=compaction_app, session_service=session_service)
