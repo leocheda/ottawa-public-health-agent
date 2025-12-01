@@ -58,8 +58,8 @@ async def retrieve_health_data_tool():
     )
 
     server_params = StdioServerParameters(
-        command="uv",
-        args=["run", server_script],
+        command="python",
+        args=[server_script],
     )
 
     async with stdio_client(server_params) as (read, write):

@@ -1,146 +1,192 @@
-# README.md
-
-This file provides guidance to the Weekly Health Briefing Agent when working with code in this repository.
+# Ottawa Public Health Agent
 
 ## Project Overview
+- **Purpose**: An AI assistant that answers Ottawa Public Health questions and surfaces live outbreak data for people who don’t want to read raw charts. It can be embedded on a website (e.g., OPH) to give conversational answers, visitor guidance, and data lookups.
+- **How it works**: Scrapes the official OPH PowerBI dashboards (MCP + Playwright), normalizes them to CSV, and routes user intents to specialist agents (research, advice, analysis, time, health data).
+- **Data & memory**: Conversations and state persist in a database (SQLite locally, Cloud SQL in production) so sessions survive refreshes and can be resumed.
+- **Impact**: Makes outbreak and public health info accessible to non-technical users, answering “what’s happening now?” and “what should I do?” in plain language.
 
-Weekly Health Briefing system that collects real-time outbreak data from Ottawa Public Health PowerBI dashboards, analyzes trends, generates human-friendly briefings, and (planned) publishes to social media platforms.
+## Architecture at a Glance
+- **Scraper pipeline**: Playwright (via patchright) renders PowerBI dashboards → BeautifulSoup parses ARIA tables → data returned as CSV/structured text.
+- **Agents (google-adk)**:
+  - `RetrieveHealthDataAgent` for current OPH facility outbreaks (MCP tool).
+  - `HealthAdviceAgent` for visitor guidance and public health Q&A.
+  - `ResearchAgent` for web facts; `DataAnalystAgent` for code/analysis; `SummarizerAgent` for rollups; `TimeAgent` for accurate time.
+  - Deterministic router and root agent orchestrate tools, keep guardrails.
+- **Storage**: `DatabaseSessionService` for events/sessions (SQLite locally, Cloud SQL in Cloud Run). Optional file logging.
+- **Sandboxes**: `microsandbox` for untrusted code execution; MCP for data retrieval separation.
 
-## Development Setup
+## Environment Setup (local)
+```bash
+# 0) Clone
+git clone https://github.com/leocheda/ottawa-public-health-agent.git
+cd ottawa-public-health-agent
 
-### Environment Setup
-```sh
-# Install dependencies using uv
+# 1) Install deps
 uv sync
 
-# Install microsandbox CLI (for sandboxed code execution)
+# 2) Install microsandbox CLI
 curl -sSL https://get.microsandbox.dev | sh
-```
 
-### Start Development Environment
-```sh
-# Start microsandbox server in dev mode (required for agent execution)
+# 3) First run only: install Playwright Chromium
+uv run playwright install chromium
+
+# 4) Set env vars: copy sample and add your Gemini key
+cp .env.sample .env
+# edit .env and set GEMINI_API_KEY=your_key_here (or GOOGLE_API_KEY if you use that)
+
+# 5) Start microsandbox (new terminal)
 msb server start --dev
 
-# Run the agent in a separate process
-uv run adk run ./ottawa_public_health_agent
-
-# OR Run the ADK Web Interface
-uv run adk web
-# Then access at http://127.0.0.1:8000
-
-
-# Persistent CLI that resumes the same conversation
-USER_ID=my_user_name SESSION_ID=my_session_id uv run python resume_cli.py
-# USER_ID/SESSION_ID can be any strings you like; using the same pair hits the same persisted session.
-# Effect: Terminal chat resumes the same DB-backed session; Type 'exit' or Ctrl+C to quit, rerun to continue.
-
-# Enable file logging (optional). OPH_AGENT_FILE_LOGS=true turns on writing to a file, OPH_AGENT_LOG_PATH sets the file name.
-# Prefix any start command with these env vars to log DEBUG output to a file:
-OPH_AGENT_FILE_LOGS=true OPH_AGENT_LOG_PATH=logger.log USER_ID=my_user_name SESSION_ID=my_session_id uv run python resume_cli.py
-
-# Quick debug run with random session (no fixed IDs, no persistence required)
-uv run adk web --log_level DEBUG .
-# Effect: Starts the Web UI at http://127.0.0.1:8000 with DEBUG logs to terminal; each launch creates a random session.
-
-# Web UI with persistent sessions (reuses SQLite DB + fixed user/session IDs)
+# 6) Launch Web UI (local)
 uv run adk web --session_service_uri sqlite+aiosqlite:///my_agent_data.db
-# Effect: Web UI lists and continues the same conversation across restarts as long as USER_ID/SESSION_ID match.
+# open http://127.0.0.1:8000/dev-ui/?app=ottawa_public_health_agent
 ```
 
-### Run Standalone Scripts
-```sh
-# Run sync version of data retrieval
-uv run python main.py
+## Cloud (Cloud Run + Cloud SQL)
+- **Image**: build/push your Dockerfile image to Artifact Registry, then deploy to Cloud Run with:
+  - `SESSION_SERVICE_URI` pointing to your Cloud SQL Postgres (async URI, e.g. `postgresql+asyncpg://USER:PASSWORD@/DB?host=/cloudsql/PROJECT:REGION:INSTANCE`).
+  - `GEMINI_API_KEY` (or secret) injected via env/Secret Manager.
+  - Cloud SQL connection bound; service account has Cloud SQL Client + Secret Accessor.
+- **Access**: Use the deployed URL with dev UI params, e.g.  
+  `https://<cloud-run-host>/dev-ui/?app=ottawa_public_health_agent&userId=user&session=b5d79ce9-bf35-40e9-85b2-bb12d2a1b3a1`  
+  (No local API key needed if the service has the key configured.)
 
-# Run async version
-uv run python main_async.py
+## Running Modes (local)
+- **Web UI (persistent)**: `uv run adk web --session_service_uri sqlite+aiosqlite:///my_agent_data.db`
+- **Web UI (quick debug)**: `uv run adk web --log_level DEBUG .`
+- **Resume CLI session**: `USER_ID=my_user SESSION_ID=my_session uv run python resume_cli.py`
+- **Optional logging**: prepend `OPH_AGENT_FILE_LOGS=true OPH_AGENT_LOG_PATH=logger.log ...`
+
+## Environment Variables
+- `GEMINI_API_KEY` (required for Gemini API) – set in `.env`
+- `SESSION_SERVICE_URI` (optional; defaults to local SQLite)
+- `USER_ID`, `SESSION_ID` (optional; pin a session)
+- `OPH_AGENT_FILE_LOGS`, `OPH_AGENT_LOG_PATH` (optional; file logging)
+
+See `.env.sample` for the full list.
+
+## Data & Database
+- **Local**: SQLite `my_agent_data.db` via `DatabaseSessionService`.
+- **Cloud**: Cloud SQL Postgres URI via `SESSION_SERVICE_URI`.
+- Sessions/events keep conversation history; agents use it to resume context and compress older events.
+
+## Quick Commands
+- Start microsandbox: `msb server start --dev`
+- Run Web UI locally: `uv run adk web --session_service_uri sqlite+aiosqlite:///my_agent_data.db`
+- Install Chromium (first run): `uv run playwright install chromium`
+
+## Future Ideas
+- Trend detection and weekly briefings
+- Public-facing embed on OPH site
+- Long-term memory bank (Vertex AI) for cross-session recall
+- Social publishing (X/Reddit/Telegram) once APIs are wired
+
+
+### MCP Server
+
+The MCP server (`mcp_server.py`) is automatically launched by the agent when needed for health data retrieval. It runs as a subprocess using stdio transport.
+
+## Docker
+
+**Build Image**
+```bash
+docker build -t ottawa-health-agent .
 ```
 
-## Architecture Overview
-
-### Core Components
-
-**Data Pipeline**
-- **Web scraping layer**: Uses Playwright (via patchright) to retrieve PowerBI dashboard content from Ottawa Public Health
-- **HTML parsing layer**: BeautifulSoup extracts tabular data from PowerBI embedded reports based on ARIA role attributes (columnheader, rowheader, gridcell)
-- **Data extraction**: Custom logic handles PowerBI's multi-table HTML structure, tracking table boundaries via column headers
-
-**Agent System (health_agent/)**
-- Built on Google ADK (Agent Development Kit)
-- Exposes two tools to the LLM:
-  - `retrieve_health_data_tool()`: Fetches and parses Ottawa health outbreak data
-  - `tool_run_python_code()`: Executes Python code in isolated microsandbox for data analysis
-- Agent uses gemini-2.5-flash model
-- Microsandbox environment pre-configured with numpy and pandas (see Sandboxfile)
-
-**Two Data Sources**
-1. Outbreaks report - tracks active outbreak cases
-2. Diseases of public health significance - requires UI interaction (clicking dataTablesButton) before scraping
-
-### Key Technical Patterns
-
-**PowerBI Scraping Strategy**
-- Uses frame navigation events and DOM content loaded signals to detect when PowerBI content is ready
-- Implements custom waiting logic (frame_navigated_handler) because PowerBI dashboards load asynchronously
-- Saves raw HTML to disk (last-retrieval-*.html) for debugging and reprocessing
-
-**Sandboxed Execution**
-- Microsandbox provides isolated Python 3 environment with 2GB memory, 1 CPU
-- Volumes mounted: `./datasets` available at `/datasets` in sandbox
-- Security: Prevents LLM-generated code from accessing host system
-
-**Async vs Sync**
-- `main.py`: Synchronous Playwright API
-- `main_async.py` and `agent.py`: Async Playwright API for concurrent operations
-- Agent system uses async throughout for tool execution
-
-### Agent Orchestration
-
-**Multi-agent layout (in `ottawa_public_health_agent/agent.py`)**
-- `RetrieveHealthDataAgent`: Calls a dedicated MCP tool to fetch **current** Ottawa outbreak tables; does not summarize the data.
-- `HealthAdviceAgent`: Produces visitor guidance for outbreaks and broader communicable disease advice, optionally delegating research and summarization through embedded `AgentTool` helpers.
-- `ResearchAgent`: Runs Google Search for historical context, leadership info, and non-facility health topics, enforcing guardrails against answering current outbreak questions directly.
-- `DataAnalystAgent`: Generates Python and executes it inside a sandboxed tool for any calculations or data wrangling, ensuring results come from code execution rather than the LLM.
-- `SummarizerAgent`: Turns raw findings into executive briefings, typically consuming outputs from the analysis or advice agents.
-- `TimeAgent`: Provides the current timestamp via a purpose-built tool to avoid relying on model time.
-
-**Deterministic routing**
-- A lightweight intent detector classifies incoming messages into outbreak, health-advice, analysis, or research requests; the router then calls the appropriate specialist without depending on the LLM to choose tools.
-- Outbreak workflows chain `RetrieveHealthDataAgent` and `HealthAdviceAgent` so visitor precautions always accompany live outbreak tables.
-- The root `Ottawa_Public_Health_Agent` exposes the specialist agents as tools and delegates all end-user prompts to the deterministic router, preserving a consistent workflow even when loaded through ADK entrypoints.
-
-**MCP integration for live data**
-- `retrieve_health_data_tool()` launches a local MCP server (`mcp_server.py`) via stdio, initializes an MCP client session, and invokes the `get_ottawa_outbreaks` tool.
-- The MCP server uses FastMCP to wrap the PowerBI scraping routine and returns CSV-formatted tables, separating browsing permissions from the core agent runtime.
-
-**Customized tools and execution sandboxes**
-- The MCP tool pulls data through `tools/ottawa_health_scraper.py`, which drives Patchright/Playwright headless Chromium to render PowerBI dashboards, waits for frame navigation, and extracts tabular ARIA-marked cells into datasets before converting them to CSV.
-- Analytical tasks go through `tool_run_python_code()`, which spins up a `microsandbox.PythonSandbox` container so that LLM-authored code executes in isolation with pandas/numpy preinstalled.
-
-## Future Development Notes
-
-**Planned Features** (see design-sketch.md)
-- Weekly trend identification via LLM analysis
-- Human-friendly briefing generation
-- Social media publishing (Twitter/X, Reddit, Telegram)
-  - OAuth2 setup required for X, LinkedIn, Reddit
-  - Telegram is simplest (bot token only)
-  - Substack has no developer API
-
-**Data Analysis Approach**
-- LLM should use tool_run_python_code for numerical analysis (leverages pandas/numpy in sandbox)
-- Can copy CSV data into sandbox filesystem for shell command inspection (head, wc, awk, etc.)
-
-## Dependencies
-
-Key packages:
-- `google-adk` - Agent framework
-- `patchright` - Playwright fork with anti-detection features
-- `microsandbox` - Sandboxed code execution environment
-- `beautifulsoup4` + `html5lib` - HTML parsing
-- `pbipy` - PowerBI utilities (installed but not actively used in current code)
+**Run Container**
+```bash
+docker run -p 8000:8000 ottawa-health-agent
+```
 
 ## Environment Variables
 
-Uses `python-dotenv` - create `.env` file for configuration (agent.py loads via `load_dotenv()`)
+Create a `.env` file for configuration:
+
+```bash
+# Optional: Enable file logging
+OPH_AGENT_FILE_LOGS=true
+OPH_AGENT_LOG_PATH=logger.log
+
+# For persistent sessions
+USER_ID=your_user_id
+SESSION_ID=your_session_id
+```
+
+## Common Tasks
+
+### View Scraped Data
+```bash
+# List recent HTML dumps
+ls -lth last-retrieval-*.html
+
+# Check datasets directory
+ls -lh datasets/
+```
+
+### Database Operations
+```bash
+# View sessions in database
+sqlite3 my_agent_data.db "SELECT * FROM sessions;"
+
+# Export database to SQL
+sqlite3 my_agent_data.db .dump > my_agent_data_dump.sql
+```
+
+### Testing the Scraper
+```bash
+# Test direct scraping (bypasses agent)
+uv run python tools/ottawa_health_scraper.py
+```
+
+## Troubleshooting
+
+### Microsandbox Issues
+```bash
+# Restart the microsandbox server
+msb server stop
+msb server start --dev
+```
+
+### Playwright Issues
+```bash
+# Reinstall browser binaries
+uv run playwright install chromium
+```
+
+### Clear Session Data
+```bash
+# Remove database (loses all conversation history)
+rm my_agent_data.db
+```
+
+## Project Structure
+
+```
+ottawa-public-health-agent/
+├── ottawa_public_health_agent/  # Main agent code
+│   ├── agent.py                 # Multi-agent orchestration
+│   └── ...
+├── tools/                       # Utilities
+│   └── ottawa_health_scraper.py # PowerBI scraping
+├── mcp_server.py                # MCP server for data retrieval
+├── resume_cli.py                # Persistent CLI interface
+├── Sandboxfile                  # Microsandbox configuration
+└── .warp/workflows/             # Warp workflow definitions
+```
+
+## Warp Workflows
+
+Access pre-configured workflows by typing `#` in Warp terminal, then search:
+- `Ottawa Health Agent` - View all project workflows
+- `#setup` - Installation commands
+- `#dev` - Development commands
+- `#web` - Web UI commands
+- `#cli` - CLI commands
+
+## Resources
+
+- [Google ADK Documentation](https://google.github.io/adk/)
+- [Microsandbox Documentation](https://docs.microsandbox.dev/)
+- [Patchright (Playwright fork)](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)
+- [MCP Protocol](https://modelcontextprotocol.io/)

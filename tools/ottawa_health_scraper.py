@@ -47,8 +47,9 @@ async def retrieve_dom_for_outbreaks_report():
 
     await sleep(5)
     html = await page.content()
-    with open("last-retrieval-outbreaks.html", "w", encoding="utf-8") as f:
-        f.write(html)
+    if debug:
+        with open("last-retrieval-outbreaks.html", "w", encoding="utf-8") as f:
+            f.write(html)
     await browser.close()
     return html
 

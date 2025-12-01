@@ -9,6 +9,8 @@ COPY . .
 # Install dependencies
 # We use pip to install the package and its dependencies from pyproject.toml
 RUN pip install --no-cache-dir .
+# Clean up build artifacts that clutter ADK agent discovery
+RUN rm -rf build *.egg-info
 
 # Install Playwright browsers and dependencies
 # We install chromium and its dependencies. 
