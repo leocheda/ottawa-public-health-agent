@@ -1,0 +1,11 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+my_agent_data.db
+my_agent_data_dump.sql
+csv_exports
+last-retrieval-*.html

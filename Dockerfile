@@ -15,10 +15,9 @@ RUN pip install --no-cache-dir .
 # Note: We are using the 'playwright' CLI which is installed as a dependency.
 RUN playwright install --with-deps chromium
 
-# Expose port if needed (Cloud Run typically uses 8080, but this agent might be a background worker)
-# ENV PORT=8080
-
-# Command to run the application
-# Using unbuffered output for logging
+# Cloud Run expects the app to listen on $PORT (default 8080)
+ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
-CMD ["python", "main.py"]
+
+# Start ADK web server for the agent, binding to 0.0.0.0:$PORT
+CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT:-8080} /app/ottawa_public_health_agent"]
