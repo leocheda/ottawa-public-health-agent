@@ -17,6 +17,8 @@ RUN rm -rf build *.egg-info
 # Note: We are using the 'playwright' CLI which is installed as a dependency.
 RUN playwright install --with-deps chromium
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Cloud Run expects the app to listen on $PORT (default 8080)
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
