@@ -105,6 +105,26 @@ LOCATION_FALLBACK = {
     "timezone": "America/Toronto",
 }
 
+FACILITIES_LIST = """
+      1. Camp
+      2. Congregate Care
+      3. Communal Living Facility
+      4. Correctional Facility
+      5. Group Home
+      6. Supportive Living
+      7. Hospice
+      8. Hospital
+      9. Licensed Child Care Facility/ Daycare
+      10. Long Term Care Home
+      11. Retirement Home
+      12. Rooming House
+      13. Elementary School
+      14. Secondary School
+      15. Post Secondary School
+      16. Shelter
+      17. Supported Independent Living
+"""
+
 
 def normalize_timezone(tz_name: str) -> str:
     try:
@@ -268,33 +288,19 @@ async def run_session(
                         print(f"{MODEL_NAME} > ", event.content.parts[0].text)
     else:
         print("No queries!")
+
+
 # Research Agent: Its job is to use the google_search tool and present findings.
 research_agent = Agent(
     name="ResearchAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction=f"""You are an expert Research Specialist. Your role is to provide accurate, verified information from external sources.
     
     CURRENT TIME CONTEXT: Operate in timezone {CURRENT_TIMEZONE} for {CURRENT_CITY}, {CURRENT_COUNTRY}. Compute "now" at response time using the system clock (example snapshot: {current_time_str()}).
 
     STRICT SCOPE CONSTRAINTS:
     - You are PROHIBITED from answering questions regarding **CURRENT** outbreaks in ANY of the following Ottawa facilities:
-      1. Camp
-      2. Congregate Care
-      3. Communal Living Facility
-      4. Correctional Facility
-      5. Group Home
-      6. Supportive Living
-      7. Hospice
-      8. Hospital
-      9. Licensed Child Care Facility/ Daycare
-      10. Long Term Care Home
-      11. Retirement Home
-      12. Rooming House
-      13. Elementary School
-      14. Secondary School
-      15. Post Secondary School
-      16. Shelter
-      17. Supported Independent Living
+{FACILITIES_LIST}.
       (These queries must be handled by the specialized Health Data Agent).
       
     - You **MUST** handle questions about:
@@ -324,32 +330,15 @@ research_agent = Agent(
 
 retrieve_health_data_agent = Agent(
     name="RetrieveHealthDataAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction="""You are a specialized Health Data Retrieval System.
     
     PRIMARY OBJECTIVE:
     - Execute the `retrieve_health_data_tool` to fetch the **CURRENT** Ottawa Public Health **healthcare institution** outbreak reports.
     
     SCOPE LIMITATION:
-    - This data covers ONLY active/recent outbreaks in:
-      1. Camp
-      2. Congregate Care
-      3. Communal Living Facility
-      4. Correctional Facility
-      5. Group Home
-      6. Supportive Living
-      7. Hospice
-      8. Hospital
-      9. Licensed Child Care Facility/ Daycare
-      10. Long Term Care Home
-      11. Retirement Home
-      12. Rooming House
-      13. Elementary School
-      14. Secondary School
-      15. Post Secondary School
-      16. Shelter
-      17. Supported Independent Living
-    - It DOES NOT cover historical data or private facility outbreaks.
+    - This data covers ONLY active/recent outbreaks in: {FACILITIES_LIST}.
+    - It DOES NOT cover historical data or facility outside of Ottawa outbreaks.
     
     DATASET SCHEMA:
     The retrieved data contains the following 7 features:
@@ -373,7 +362,7 @@ retrieve_health_data_agent = Agent(
 
 data_analyst_agent = Agent(
     name="DataAnalystAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction="""You are an expert Python Data Analyst.
     
     PRIMARY OBJECTIVE:
@@ -402,7 +391,7 @@ data_analyst_agent = Agent(
 # Summarizer Agent: Its job is to summarize the text it receives.
 summarizer_agent = Agent(
     name="SummarizerAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     # The instruction is modified to request a bulleted list for a clear output format.
     instruction="""You are an expert Executive Summarizer.
     
@@ -425,7 +414,7 @@ summarizer_agent = Agent(
 
 health_advice_agent = Agent(
     name="HealthAdviceAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction="""You are the Health Advice Agent.
 
 OVERALL ROLE:
@@ -439,24 +428,7 @@ MODE 1: OUTBREAK VISITOR ADVICE
 
 TRIGGER:
 - The user clearly indicates they are visiting, planning to visit, working in, or volunteering in a facility that is experiencing an outbreak.
-- RELEVANT FACILITIES:
-    1. Camp
-    2. Congregate Care
-    3. Communal Living Facility
-    4. Correctional Facility
-    5. Group Home
-    6. Supportive Living
-    7. Hospice
-    8. Hospital
-    9. Licensed Child Care Facility/ Daycare
-    10. Long Term Care Home
-    11. Retirement Home
-    12. Rooming House
-    13. Elementary School
-    14. Secondary School
-    15. Post Secondary School
-    16. Shelter
-    17. Supported Independent Living
+- RELEVANT FACILITIES: {FACILITIES_LIST}.
 
 BEHAVIOUR:
 - In this mode, you MUST ignore all other capabilities and simply return the official Ottawa Public Health visitor outbreak recommendations.
@@ -556,7 +528,7 @@ ADDITIONAL GUARDRAIL:
 
 time_agent = Agent(
     name="TimeAgent",
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction=f"""You are a Time Specialist.
     
     PRIMARY OBJECTIVE:
@@ -714,7 +686,7 @@ async def run_user_message(
 # Root agent for ADK loader compatibility. Instruct it to always delegate to deterministic router.
 root_agent = Agent(
     name=APP_NAME,
-    model=Gemini(model="gemini-2.5-flash", retry_options=retry_config),
+    model=Gemini(model=MODEL_NAME, retry_options=retry_config),
     instruction=f"""Your purpose is to orchestrate a team of specialized agents in order to answer any user query, with particular expertise in Ottawa Public Health outbreak information.
     You should also engage in helpful conversation and remember details the user shares with you (like their name).
     
@@ -722,26 +694,7 @@ root_agent = Agent(
     IMPORTANT: For any question about time/date/timezone, delegate to the `TimeAgent`.
 
     AVAILABLE SPECIALISTS:
-
-    AVAILABLE SPECIALISTS:
-    1. `RetrieveHealthDataAgent`: Fetches CURRENT Ottawa Public Health facility outbreak reports. Use this for questions about **active/recent outbreaks** in:
-       1) Camp
-       2) Congregate Care
-       3) Communal Living Facility
-       4) Correctional Facility
-       5) Group Home
-       6) Supportive Living
-       7) Hospice
-       8) Hospital
-       9) Licensed Child Care Facility/ Daycare
-      10) Long Term Care Home
-      11) Retirement Home
-      12) Rooming House
-      13) Elementary School
-      14) Secondary School
-      15) Post Secondary School
-      16) Shelter
-      17) Supported Independent Living
+    1. `RetrieveHealthDataAgent`: Fetches CURRENT Ottawa Public Health facility outbreak reports. Use this for questions about **active/recent outbreaks** in: {FACILITIES_LIST}.
     2. `HealthAdviceAgent`: Use this for:
        - **Visitor Advice**: Official OPH guidelines for visiting facilities with outbreaks.
        - **Health/Disease Inquiries**: Questions about Communicable Diseases (symptoms, prevention, treatment) or General Public Health.
