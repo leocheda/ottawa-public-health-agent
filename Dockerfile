@@ -20,4 +20,4 @@ ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 
 # Start ADK web server for the agent, binding to 0.0.0.0:$PORT
-CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT:-8080} /app"]
+CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT:-8080} /app/ottawa_public_health_agent"]
