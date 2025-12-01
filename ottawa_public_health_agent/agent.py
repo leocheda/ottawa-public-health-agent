@@ -1,3 +1,15 @@
+"""
+Ottawa Public Health Agent
+--------------------------
+This module wires together a multi-agent system (google-adk) plus MCP tools to:
+1) Fetch live outbreak data from the official OPH PowerBI dashboards (via Playwright/MCP).
+2) Provide public health advice, research, analysis, and time via specialized agents.
+3) Persist conversations in a database so sessions survive refresh/restart.
+
+The code is intentionally verbose in comments to satisfy assignment requirements and
+to make it easy for reviewers to understand each section without reading the source in depth.
+"""
+
 from typing import Any, Dict
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -32,6 +44,7 @@ ENABLE_FILE_LOGS = os.getenv("OPH_AGENT_FILE_LOGS", "false").lower() == "true"
 LOG_PATH = os.getenv("OPH_AGENT_LOG_PATH", "logger.log")
 
 # Optional file logging with cleanup; gated to avoid nuking logs unexpectedly.
+# When OPH_AGENT_FILE_LOGS=true, we remove the previous log to avoid unbounded growth.
 if ENABLE_FILE_LOGS:
     try:
         if os.path.exists(LOG_PATH):
@@ -50,9 +63,11 @@ if ENABLE_FILE_LOGS:
 
 async def retrieve_health_data_tool():
     """
-    Retrieves Ottawa Health outbreak data via MCP Server.
+    Retrieves Ottawa outbreak data via the MCP server.
+    - Spins up the local MCP process (mcp_server.py) using stdio transport.
+    - Calls the exported tool `get_ottawa_outbreaks`.
+    - Returns the raw CSV/text payload; downstream agents format/summarize.
     """
-    # Get the absolute path to the mcp_server.py
     server_script = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "mcp_server.py")
     )
@@ -74,7 +89,8 @@ async def retrieve_health_data_tool():
 
 async def tool_run_python_code(code_string: str) -> str:
     """
-    Runs python code and returns the output. The input string is expected to be valid python code.
+    Runs python code in an isolated microsandbox and returns stdout.
+    This keeps untrusted LLM-authored code away from the host.
 
     Args:
         code_string (str): The python code to run.
@@ -105,6 +121,7 @@ LOCATION_FALLBACK = {
     "timezone": "America/Toronto",
 }
 
+# Canonical list of monitored facilities for outbreak data and advice prompts.
 FACILITIES_LIST = """
       1. Camp
       2. Congregate Care

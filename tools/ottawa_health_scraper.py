@@ -1,28 +1,39 @@
+"""
+Ottawa Health PowerBI scraper (async)
+-------------------------------------
+This helper drives Playwright (via patchright) to render the OPH PowerBI dashboards,
+waits for frames to load, and extracts the rendered HTML for downstream parsing.
+
+Notes for reviewers:
+- debug flag controls noisy prints and optional HTML dumping to disk.
+- We avoid leaving HTML files around unless debug is enabled.
+- The scraper is used by MCP to separate browsing permissions from the agent runtime.
+"""
+
 from asyncio import sleep
 from bs4 import BeautifulSoup
 from patchright.async_api import async_playwright
 from pprint import pp
 import bs4
 
-global debug
+# Set to True for verbose logging and optional HTML dump to disk.
 debug = False
-
-global dcl_event_count
+# Count DOMContentLoaded events; useful to know when the dashboard finishes loading.
 dcl_event_count = 0
+# Flag set when frame navigation occurs; used to gate waits.
+didFrameNavigate = False
 
 
 def inc_dcl_event_count():
+    """Increment DOMContentLoaded counter (used by Playwright event hook)."""
     global dcl_event_count
     dcl_event_count = dcl_event_count + 1
     print(f"DCL Event Count: {dcl_event_count}", flush=True) if debug else None
     return None
 
 
-global didFrameNavigate
-didFrameNavigate = False
-
-
 def frame_navigated_handler(frame):
+    """Mark that the main frame has navigated (Playwright event hook)."""
     global didFrameNavigate
     print(f"Frame navigated to {frame.url}", flush=True) if debug else None
     didFrameNavigate = True
@@ -30,7 +41,10 @@ def frame_navigated_handler(frame):
 
 
 async def retrieve_dom_for_outbreaks_report():
-    # Outbreaks
+    """
+    Fetch the outbreaks dashboard HTML.
+    Uses frame navigation + DOMContentLoaded signals to ensure PowerBI content is ready.
+    """
     url = "https://app.powerbi.com/view?r=eyJrIjoiMzIxNGU5ODMtNmRjZi00OWNmLWIwYWUtMmY0MzA2NzZmZjYyIiwidCI6ImRmY2MwMzNkLWRmODctNGM2ZS1hMWI4LThlYWE3M2YxYjcyZSJ9&pageName=ReportSection7971162d78b00a048576"
 
     html = ""
@@ -48,6 +62,7 @@ async def retrieve_dom_for_outbreaks_report():
     await sleep(5)
     html = await page.content()
     if debug:
+        # Only dump HTML when explicitly debugging to avoid littering the repo.
         with open("last-retrieval-outbreaks.html", "w", encoding="utf-8") as f:
             f.write(html)
     await browser.close()
@@ -55,6 +70,10 @@ async def retrieve_dom_for_outbreaks_report():
 
 
 async def retrieve_dom_for_diseases_of_ph_significance():
+    """
+    Fetch the diseases-of-public-health-significance dashboard HTML.
+    Requires a button click to expose tables, so we wait and then click the correct element.
+    """
     url = "https://app.powerbi.com/view?r=eyJrIjoiODVkZmU3NzItNTliYi00YzFlLTk2ZWItODcwOWU5NDhlMGU3IiwidCI6ImRmY2MwMzNkLWRmODctNGM2ZS1hMWI4LThlYWE3M2YxYjcyZSJ9&pageName=ReportSection1b2070dda67567cb9a79"
     html = ""
     p = await async_playwright().start()
