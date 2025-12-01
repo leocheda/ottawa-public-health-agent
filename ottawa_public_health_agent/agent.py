@@ -123,7 +123,7 @@ FACILITIES_LIST = """
       15. Post Secondary School
       16. Shelter
       17. Supported Independent Living
-"""
+""".strip()
 
 
 def normalize_timezone(tz_name: str) -> str:
@@ -331,13 +331,14 @@ research_agent = Agent(
 retrieve_health_data_agent = Agent(
     name="RetrieveHealthDataAgent",
     model=Gemini(model=MODEL_NAME, retry_options=retry_config),
-    instruction="""You are a specialized Health Data Retrieval System.
+    instruction=f"""You are a specialized Health Data Retrieval System.
     
     PRIMARY OBJECTIVE:
     - Execute the `retrieve_health_data_tool` to fetch the **CURRENT** Ottawa Public Health **healthcare institution** outbreak reports.
     
     SCOPE LIMITATION:
-    - This data covers ONLY active/recent outbreaks in: {FACILITIES_LIST}.
+    - This data covers ONLY active/recent outbreaks in:
+{FACILITIES_LIST}.
     - It DOES NOT cover historical data or facility outside of Ottawa outbreaks.
     
     DATASET SCHEMA:
@@ -415,7 +416,7 @@ summarizer_agent = Agent(
 health_advice_agent = Agent(
     name="HealthAdviceAgent",
     model=Gemini(model=MODEL_NAME, retry_options=retry_config),
-    instruction="""You are the Health Advice Agent.
+    instruction=f"""You are the Health Advice Agent.
 
 OVERALL ROLE:
 - You provide clear, evidence-based public health advice.
@@ -428,7 +429,8 @@ MODE 1: OUTBREAK VISITOR ADVICE
 
 TRIGGER:
 - The user clearly indicates they are visiting, planning to visit, working in, or volunteering in a facility that is experiencing an outbreak.
-- RELEVANT FACILITIES: {FACILITIES_LIST}.
+- RELEVANT FACILITIES:
+{FACILITIES_LIST}.
 
 BEHAVIOUR:
 - In this mode, you MUST ignore all other capabilities and simply return the official Ottawa Public Health visitor outbreak recommendations.
@@ -694,7 +696,8 @@ root_agent = Agent(
     IMPORTANT: For any question about time/date/timezone, delegate to the `TimeAgent`.
 
     AVAILABLE SPECIALISTS:
-    1. `RetrieveHealthDataAgent`: Fetches CURRENT Ottawa Public Health facility outbreak reports. Use this for questions about **active/recent outbreaks** in: {FACILITIES_LIST}.
+    1. `RetrieveHealthDataAgent`: Fetches CURRENT Ottawa Public Health facility outbreak reports. Use this for questions about **active/recent outbreaks** in:
+    {FACILITIES_LIST}.
     2. `HealthAdviceAgent`: Use this for:
        - **Visitor Advice**: Official OPH guidelines for visiting facilities with outbreaks.
        - **Health/Disease Inquiries**: Questions about Communicable Diseases (symptoms, prevention, treatment) or General Public Health.
